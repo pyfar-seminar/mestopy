@@ -73,69 +73,89 @@ def take(x_excitation, meas_chain):
 
 
 # Class to generate ref-Objects, that can bei part of the MeasurementChain
-class RefObj(object, Signal):
+class RefObj(object):
 
-    def __init__(
-            self,
-            ref_data,
-            calibration=1,
-            device='',
-            inverted=False):
+    def __init__(self, data, calibration=1, name='', inverted=False):
+        self.data = data
+        self.calibration = calibration
+        self.name = name
+        self.inverted = inverted
         """TODO: to be defined. """
 
     @property
     def freq(self):
-        self.ref_data.domain = 'freq'
-        return self.ref_data._data
+        self.data.domain = 'freq'
+        return self.data
 
     @freq.setter
     def freq(self, ref_signal, calibration=1, device_name='', inverted=False):
         ref_signal.domain = "freq"
-        self._ref_data = ref_signal
-        self._device = device_name
-        self._inverted = inverted
+        self.data = ref_signal
+        self.name = device_name
+        self.inverted = inverted
 
     @property
     def device_name(self):
-        return self._device
+        return self.name
 
     @device_name.setter
     def device_name(self, new_name):
-        self._device = new_name
+        self.name = new_name
 
     @property
-    def inverted(self):
-        return self._inverted
+    def is_inverted(self):
+        return self.inverted
 
-    @inverted.setter
+    @is_inverted.setter
     def invert(self):
         new_data = self.ref_data.freq() * (-1)
-        self._ref_data = Signal(new_data,
-                                self.ref_data.sampling_rate(),
-                                self.ref_data.sampling_rate())
+        self.data = Signal(new_data,
+                           self.data.sampling_rate(),
+                           fft_norm=self.data.fft_norm(),
+                           dtype=self.data.dtype())
 
 
 # Class for MeasurementChain as frame for RefObjs and calibration
-class MeasurementChain(object, Signal, RefObj):
+class MeasurementChain(object):
 
-    def __init__(self,
-                 sampling_rate,
-                 sound_device,
-                 refs=[],
-                 comment=None):
+    def __init__(self, sampling_rate, sound_device, refs=[], comment=None):
+        self.sampling_rate = sampling_rate
+        self.sound_device = sound_device
+        self.refs = refs
+        self.comment = comment
         """TODO: to be defined. """
 
-    def add_ref(self, ref_signal, calibration, device_name, inverted):
-        # add ref-measurement to chain
-        new_ref = RefObj()
-        new_ref.freq(ref_signal, calibration, device_name, inverted)
-        self.refs.append(new_ref)
+    def add_ref(self,
+                ref_signal,
+                calibration=1,
+                device_name='',
+                inverted=False):
+        if self.refs == []:
+            # add ref-measurement to chain
+            new_ref = RefObj(ref_signal,
+                             calibration,
+                             device_name,
+                             inverted=inverted)
+            self.refs.append(new_ref)
+        else:
+            # check if n_bins of all ref_signals is the same
+            if (self.refs[0].data.n_bins == ref_signal.n_bins and
+                    (self.refs[0].data.sampling_rate ==
+                     ref_signal.sampling_rate)):
+                # add ref-measurement to chain
+                new_ref = RefObj(ref_signal,
+                                 calibration,
+                                 device_name,
+                                 inverted=inverted)
+                self.refs.append(new_ref)
+            else:
+                raise ValueError("ref_signal has wrong samping_rate or n_bins")
 
     def ls_ref(self):
         # list all ref-objects in chain
         ref_names = []
-        for ob in self.calibration_responses:
-            name = ob.device_name()
+        for ob in self.refs:
+            name = ob.device_name
             ref_names.append(name)
         return ref_names
 
@@ -143,8 +163,23 @@ class MeasurementChain(object, Signal, RefObj):
         # remove ref-object in chain position num
         if isinstance(num, int):
             pass
+            """TODO: to be defined. """
         # remove ref-object in chain by name
         elif isinstance(num, str):
             pass
+            """TODO: to be defined. """
         else:
             raise TypeError("ref-object to remove must be int or str!")
+
+    def freq_resp(self):
+        if self.refs != []:
+            resp = Signal(np.zeros(self.refs[0].data.n_samples),
+                          self.sampling_rate,
+                          fft_norm=self.refs[0].data.fft_norm,
+                          dtype=self.refs[0].data.dtype)
+            for ref in self.refs:
+                resp = resp + ref.data
+        else:
+            resp = Signal(np.zeros_like(self.sampling_rate),
+                          self.sampling_rate)
+        return resp
