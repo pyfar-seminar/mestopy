@@ -165,9 +165,11 @@ class MeasurementChain(object):
     def rm_ref(self, num):
         # remove ref-object in chain position num
         if isinstance(num, int):
-    
-            pass
-            """TODO: to be defined. """
+            front = self.refs[:num]
+            back = self.refs[num+1:]
+            for i in back : 
+                front.append(i) 
+            self.refs = front
         else:
             raise TypeError("ref-object to remove must be int")
 
