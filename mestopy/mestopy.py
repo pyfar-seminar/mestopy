@@ -130,6 +130,9 @@ class MeasurementChain(object):
                 calibration=1,
                 device_name='',
                 inverted=False):
+        # check if ref_signal is a pyfar.Signal, if not raise Error
+        if not isinstance(ref_signal, Signal):
+            raise TypeError('Input data has to be of type: Signal.')
         if self.refs == []:
             # add ref-measurement to chain
             new_ref = RefObj(ref_signal,
@@ -162,14 +165,15 @@ class MeasurementChain(object):
     def rm_ref(self, num):
         # remove ref-object in chain position num
         if isinstance(num, int):
-            pass
-            """TODO: to be defined. """
-        # remove ref-object in chain by name
-        elif isinstance(num, str):
+    
             pass
             """TODO: to be defined. """
         else:
-            raise TypeError("ref-object to remove must be int or str!")
+            raise TypeError("ref-object to remove must be int")
+
+    # reset complete ref-object-list
+    def reset_ref(self):
+        self.refs = []
 
     def freq_resp(self):
         if self.refs != []:
