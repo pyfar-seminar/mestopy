@@ -68,7 +68,7 @@ def take(x_excitation, meas_chain):
     # record signal
     # deconv
     # + cal resp
-
+    """TODO: to be defined. """
     return 0  # pyfar-Signal of Impulse Response
 
 
@@ -111,6 +111,7 @@ class RefObj(object):
         new_data = self.ref_data.freq() * (-1)
         self.data = Signal(new_data,
                            self.data.sampling_rate(),
+                           domain='freq',
                            fft_norm=self.data.fft_norm(),
                            dtype=self.data.dtype())
 
@@ -135,6 +136,7 @@ class MeasurementChain(object):
             raise TypeError('Input data has to be of type: Signal.')
         if self.refs == []:
             # add ref-measurement to chain
+            ref_signal.domain = 'freq'
             new_ref = RefObj(ref_signal,
                              calibration,
                              device_name,
@@ -177,15 +179,26 @@ class MeasurementChain(object):
     def reset_ref(self):
         self.refs = []
 
-    def freq_resp(self):
+    # get the freq-response of specific device in measurement chain
+    def get_ref(self, num):
+        if isinstance(num, int):
+            resp = self.refs[num].data
+            resp.domain = 'freq'
+            return resp
+        else:
+            raise TypeError("ref-object to remove must be int")        
+
+    # get the freq-response of whole measurement chain as pyfar.Signal
+    def get_refs(self):
         if self.refs != []:
-            resp = Signal(np.zeros(self.refs[0].data.n_samples),
+            resp = Signal(np.ones(int(self.refs[0].data.n_bins)),
                           self.sampling_rate,
+                          domain='freq',
                           fft_norm=self.refs[0].data.fft_norm,
                           dtype=self.refs[0].data.dtype)
             for ref in self.refs:
-                resp = resp + ref.data
+                resp = resp * ref.data
         else:
-            resp = Signal(np.zeros_like(self.sampling_rate),
+            resp = Signal(np.ones(self.sampling_rate),
                           self.sampling_rate)
         return resp
