@@ -4,7 +4,7 @@ from pyfar import Signal
 
 
 # function to perform a deconvolution of two signals
-def deconv(x_meas, x_ref):
+def deconv(x_meas, x_ref, measurement_chain=None):
     # Check if both inputs are type Signal
     if not isinstance(x_meas, Signal):
         raise TypeError('Input data has to be of type: Signal.')
@@ -169,8 +169,8 @@ class MeasurementChain(object):
         if isinstance(num, int):
             front = self.refs[:num]
             back = self.refs[num+1:]
-            for i in back : 
-                front.append(i) 
+            for i in back:
+                front.append(i)
             self.refs = front
         else:
             raise TypeError("ref-object to remove must be int")
@@ -186,7 +186,7 @@ class MeasurementChain(object):
             resp.domain = 'freq'
             return resp
         else:
-            raise TypeError("ref-object to remove must be int")        
+            raise TypeError("ref-object to remove must be int")
 
     # get the freq-response of whole measurement chain as pyfar.Signal
     def get_refs(self):
