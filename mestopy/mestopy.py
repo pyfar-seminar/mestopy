@@ -63,7 +63,7 @@ def deconv(x_meas, x_ref, measurement_chain=None):
 
 
 # function to perform complete measurement and save as pyfar.Signal
-def take(x_excitation, meas_chain):
+def take(x_excitation, measurement_chain=None):
     # play signal
     # record signal
     # deconv
@@ -73,20 +73,20 @@ def take(x_excitation, meas_chain):
 
 
 # Class to generate ref-Objects, that can bei part of the MeasurementChain
-class RefObj(object):
+class DeviceObj(object):
 
-    def __init__(self, data, calibration=1, name='', invert=False):
-        self.calibration = calibration
+    def __init__(self, data, sens=1, name=''):
+        if not isinstance(data, Signal):
+            raise AttributeError("Useless DeviceObj,"
+                                 " data or sens must be defined!")
+        self.sens = sens
         self.name = name
-        self.invert = invert
-        if invert is True:
-            data = 1 / data
-        self.data = data * calibration
+        self.data = data
 
     @property
     def freq(self):
         self.data.domain = 'freq'
-        return self.data
+        return self.data * self.sens
 
     @property
     def device_name(self):
@@ -96,127 +96,131 @@ class RefObj(object):
     def device_name(self, new_name):
         self.name = new_name
 
-    @property
-    def inverted(self):
-        return self.invert
-
-    @inverted.setter
-    def inverted(self, invert):
-        if invert != self.invert:
-            new_data = 1 / self.ref_data.freq()
-            self.data = Signal(new_data,
-                               self.data.sampling_rate(),
-                               domain='freq',
-                               fft_norm=self.data.fft_norm(),
-                               dtype=self.data.dtype())
-            self.invert = invert
+    def __repr__(self):
+        """String representation of DeviceObj class.
+        """
+        repr_string = (
+            f"{self.name} defined by {self.data.n_bins} freq-bins, "
+            f"sensitivity={self.sens}\n")
+        return repr_string
 
 
 # Class for MeasurementChain as frame for RefObjs and calibration
 class MeasurementChain(object):
 
-    def __init__(self, sampling_rate, sound_device, refs=[], comment=None):
+    def __init__(self,
+                 sampling_rate,
+                 sound_device=None,
+                 devices=[],
+                 comment=None):
         self.sampling_rate = sampling_rate
         self.sound_device = sound_device
-        self.refs = refs
+        self.devices = devices
         self.comment = comment
 
-    def add_ref(self,
-                ref_signal,
-                calibration=1,
-                device_name='',
-                invert=False):
+    def add_device(self,
+                   device_data=None,
+                   sens=1,
+                   device_name=''):
+        if device_data is None:
+            device_data = Signal(np.full(int(self.sampling_rate/2), 1.0),
+                                 self.sampling_rate,
+                                 domain='freq')
         # check if ref_signal is a pyfar.Signal, if not raise Error
-        if not isinstance(ref_signal, Signal):
-            raise TypeError('Input data has to be of type: Signal.')
+        if not isinstance(device_data, Signal):
+            raise TypeError('Input data must be of type: Signal.')
         # check if there are no devices in measurement chain
-        if self.refs == []:
+        if self.devices == []:
             # add ref-measurement to chain
-            ref_signal.domain = 'freq'
-            new_ref = RefObj(ref_signal,
-                             calibration,
-                             device_name,
-                             invert=invert)
-            self.refs.append(new_ref)
+            device_data.domain = 'freq'
+            new_device = DeviceObj(device_data,
+                                   sens,
+                                   device_name)
+            self.devices.append(new_device)
         else:
-            # check if n_bins of all ref_signals is the same
-            if (self.refs[0].data.n_bins == ref_signal.n_bins and
-               (self.refs[0].data.sampling_rate == ref_signal.sampling_rate)):
-                # add ref-measurement to chain
-                new_ref = RefObj(ref_signal,
-                                 calibration,
-                                 device_name,
-                                 invert=invert)
-                self.refs.append(new_ref)
-            else:
-                raise ValueError("ref_signal has wrong samping_rate or n_bins")
+            # check if n_bins of all devices is the same
+            if not self.devices[0].data.n_bins == device_data.n_bins:
+                raise ValueError("ref_signal has wrong n_bins")
+            # check if sampling_rate of new device and MeasurementChain
+            # is the same
+            if not self.sampling_rate == device_data.sampling_rate:
+                raise ValueError("ref_signal has wrong samping_rate")
+            # add device to chain
+            new_device = DeviceObj(device_data,
+                                   sens,
+                                   device_name)
+            self.devices.append(new_device)
 
-    def ls_ref(self):
+    def list_devices(self):
         # list all ref-objects in chain
-        ref_names = []
-        for ob in self.refs:
-            name = ob.device_name
-            ref_names.append(name)
-        return ref_names
+        device_names = []
+        for dev in self.devices:
+            name = dev.device_name
+            device_names.append(name)
+        return device_names
 
-    def rm_ref(self, num):
+    def remove_device(self, num):
         # remove ref-object in chain position num
         if isinstance(num, int):
-            front = self.refs[:num]
-            back = self.refs[num+1:]
+            front = self.devices[:num]
+            back = self.devices[num+1:]
             for i in back:
                 front.append(i)
-            self.refs = front
+            self.devices = front
         # remove ref-object in chain by name
         elif isinstance(num, str):
             i = 0
-            for ref in self.refs:
-                if ref.name == num:
-                    self.rm_ref(i)
-                    return True
+            for dev in self.devices:
+                if dev.name == num:
+                    self.remove_device(i)
+                    return
                 i = i + 1
-            return False
+            raise ValueError(f"device {num} not found")
         else:
-            raise TypeError("ref-object to remove must be int or str")
+            raise TypeError("device to remove must be int or str")
 
     # reset complete ref-object-list
-    def reset_ref(self):
-        self.refs = []
+    def reset_devices(self):
+        self.devices = []
 
     # get the freq-response of specific device in measurement chain
-    def get_ref(self, num, invert=False):
+    def device_freq(self, num):
         if isinstance(num, int):
-            resp = self.refs[num].data
-            resp.domain = 'freq'
-            if invert == self.refs[num].invert:
-                return resp
-            else:
-                resp = resp ** -1
-                return resp
+            dev = self.devices[num].data * self.devices[num].sens
+            dev.domain = 'freq'
+            return dev
         elif isinstance(num, str):
             i = 0
-            for ref in self.refs:
-                if ref.name == num:
-                    return self.get_ref(i, invert=invert)
+            for dev in self.devices:
+                if dev.name == num:
+                    return self.device_freq(i)
                 i = i + 1
-            raise IndexError('name not found')
+            raise ValueError(f"device {num} not found")
         else:
-            raise TypeError("ref-object to remove must be int or str")
+            raise TypeError("device to remove must be int or str")
 
     # get the freq-response of whole measurement chain as pyfar.Signal
-    def get_refs(self, invert=False):
-        if self.refs != []:
-            resp = Signal(np.ones(int(self.refs[0].data.n_bins)),
+    def freq(self):
+        if self.devices != []:
+            resp = Signal(np.ones(int(self.devices[0].data.n_bins)),
                           self.sampling_rate,
                           domain='freq',
-                          fft_norm=self.refs[0].data.fft_norm,
-                          dtype=self.refs[0].data.dtype)
-            for ref in self.refs:
-                if ref.invert == invert:
-                    resp = resp * ref.data
-                else:
-                    resp = resp * (ref.data ** -1)
+                          fft_norm=self.devices[0].data.fft_norm,
+                          dtype=self.devices[0].data.dtype)
+            for dev in self.devices:
+                resp = resp * dev.data * dev.sens
         else:
-            resp = Signal(np.ones(self.sampling_rate),
-                          self.sampling_rate)
+            resp = Signal(np.ones(self.sampling_rate), self.sampling_rate)
         return resp
+
+    def __repr__(self):
+        """String representation of MeasurementChain class.
+        """
+        repr_string = (
+            f"measurement chain with {len(self.devices)} devices "
+            f"@ {self.sampling_rate} Hz sampling rate.\n")
+        i = 1
+        for dev in self.devices:
+            repr_string = f"{repr_string}# {i}: {dev}"
+            i += 1
+        return repr_string
